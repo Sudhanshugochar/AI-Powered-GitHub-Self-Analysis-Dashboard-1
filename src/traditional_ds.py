@@ -1,12 +1,24 @@
 import pandas as pd
-import numpy as np
 import json
-from sklearn.cluster import KMeans
-from sklearn.preprocessing import StandardScaler
-from prophet import Prophet
 import plotly.express as px
 import plotly.graph_objects as go
 import os
+
+try:
+    import numpy as np
+    from sklearn.cluster import KMeans
+    from sklearn.preprocessing import StandardScaler
+    SKLEARN_AVAILABLE = True
+except Exception as e:
+    print(f"Warning: scikit-learn/numpy not available ({e})")
+    SKLEARN_AVAILABLE = False
+
+try:
+    from prophet import Prophet
+    PROPHET_AVAILABLE = True
+except Exception as e:
+    print(f"Warning: prophet not available ({e})")
+    PROPHET_AVAILABLE = False
 
 class TraditionalAnalyzer:
     def __init__(self, data_path="data/raw_data.json"):
@@ -36,6 +48,7 @@ class TraditionalAnalyzer:
             
             repo_list.append({
                 "name": repo_meta.get("name"),
+                "description": repo_meta.get("description", ""),
                 "stars": repo_meta.get("stargazers_count", 0),
                 "forks": repo_meta.get("forks_count", 0),
                 "language": repo_meta.get("language", "Unknown"),
@@ -77,6 +90,9 @@ class TraditionalAnalyzer:
         }
 
     def perform_clustering(self, n_clusters=3):
+        if not SKLEARN_AVAILABLE:
+            print("Clustering disabled: scikit-learn is not available.")
+            return None
         if self.repos_df is None or self.repos_df.empty:
             return None
         
@@ -235,6 +251,9 @@ class TraditionalAnalyzer:
         return events
 
     def forecast_activity(self):
+        if not PROPHET_AVAILABLE:
+            print("Forecasting disabled: prophet is not available.")
+            return None
         if self.commits_df is None or self.commits_df.empty:
             return None
 

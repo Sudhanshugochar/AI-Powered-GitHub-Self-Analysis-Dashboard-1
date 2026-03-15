@@ -1,0 +1,27 @@
+{
+  "api_key": "api_leopj20adxr3hfjvsqfbqerc",
+  "source_locale": "en",
+  "locales": [
+    "en",
+    "es",
+    "hi",
+    "fr",
+    "de",
+    "ja",
+    "zh",
+    "pt",
+    "ru",
+    "ar",
+    "it",
+    "ko",
+    "nl",
+    "tr"
+  ],
+  "buckets": [
+    {
+      "name": "dashboard_translations",
+      "path": "locales/*.json",
+      "parser": "json"
+    }
+  ]
+}

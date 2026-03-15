@@ -5,6 +5,8 @@ import plotly.express as px
 import os
 import sys
 import json
+import requests
+from streamlit_lottie import st_lottie
 
 # Add parent dir to path to import src
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -42,7 +44,48 @@ def load_translations(lang_code):
         # print(f"Error loading {lang_code} translations: {e}")
         pass
         
+    # Temporary hardcoded fallback for Hindi if JSON is not generated yet
+    if lang_code == "hi" and not translations.get("main_title") or translations.get("main_title") == "main_title":
+        hi_fallback = {
+            "main_title": "गिटहब डेवलपर डैशबोर्ड",
+            "sidebar_header": "⚙️ कॉन्फ़िगरेशन",
+            "username_label": "गिटहब यूजरनेम",
+            "token_label": "गिटहब टोकन (वैकल्पिक)",
+            "fetch_data_button": "⏳ डेटा प्राप्त करें",
+            "fetching_spinner": "गिटहब से डेटा लाया जा रहा है...",
+            "fetch_success": "✅ डेटा सफलतापूर्वक प्राप्त किया गया!",
+            "fetch_error": "❌ डेटा प्राप्त करने में विफल।",
+            "enter_username_info": "शुरू करने के लिए साइडबार में एक गिटहब यूजरनेम दर्ज करें।",
+            "overview_header": "📊 अवलोकन",
+            "tab_repos": "📦 रिपॉजिटरी",
+            "tab_languages": "🔤 भाषाएं",
+            "tab_llm": "🤖 एआई विश्लेषण",
+            "tab_forecasting": "📈 पूर्वानुमान",
+            "tab_model_comparison": "⚖️ मॉडल तुलना"
+        }
+        translations.update(hi_fallback)
+        
     return translations
+
+def load_lottieurl(url: str):
+    r = requests.get(url)
+    if r.status_code != 200:
+        return None
+    return r.json()
+
+def get_devicon_url(lang):
+    mapping = {
+        "python": "python", "javascript": "javascript", "typescript": "typescript",
+        "html": "html5", "css": "css3", "java": "java", "c++": "cplusplus",
+        "c": "c", "c#": "csharp", "php": "php", "ruby": "ruby", "go": "go", 
+        "swift": "swift", "kotlin": "kotlin", "rust": "rust", "dart": "dart", 
+        "scala": "scala", "r": "r", "shell": "bash", "vue": "vuejs",
+        "react": "react", "angular": "angularjs"
+    }
+    mapped = mapping.get(lang.lower())
+    if mapped:
+        return f"https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/{mapped}/{mapped}-original.svg"
+    return None
 
 # Language Selector
 # For now, we manually list supported languages. Lingo.dev will generate the actual JSONs.
@@ -50,13 +93,34 @@ LANGUAGES = {
     "en": "English",
     "es": "Español",
     "fr": "Français", 
-    "de": "Deutsch"
+    "de": "Deutsch",
+    "hi": "हिन्दी (Hindi)",
+    "ja": "日本語 (Japanese)",
+    "zh": "中文 (Chinese)",
+    "pt": "Português",
+    "ru": "Русский (Russian)",
+    "ar": "العربية (Arabic)",
+    "it": "Italiano",
+    "ko": "한국어 (Korean)",
+    "nl": "Nederlands",
+    "tr": "Türkçe"
 }
 
 st.sidebar.header("Language")
-selected_lang_code = st.sidebar.selectbox("Select Language", options=list(LANGUAGES.keys()), format_func=lambda x: LANGUAGES[x])
 
-translations = load_translations(selected_lang_code)
+if "selected_lang" not in st.session_state:
+    st.session_state["selected_lang"] = "en"
+
+selected_lang_code = st.sidebar.selectbox(
+    "Select Language", 
+    options=list(LANGUAGES.keys()), 
+    format_func=lambda x: LANGUAGES[x],
+    index=list(LANGUAGES.keys()).index(st.session_state["selected_lang"]),
+    key="lang_selector"
+)
+
+st.session_state["selected_lang"] = selected_lang_code
+translations = load_translations(st.session_state["selected_lang"])
 
 def t(key, **kwargs):
     """
@@ -78,10 +142,58 @@ def t(key, **kwargs):
 
 st.title(t("main_title"))
 
+# --- Global Custom CSS for Glassmorphism & Badges ---
+st.markdown("""
+<style>
+.glass-card {
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 15px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.glass-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+.tech-badge {
+    display: inline-block;
+    padding: 6px 12px;
+    margin: 3px;
+    border-radius: 20px;
+    background: linear-gradient(135deg, #FF0080, #7928CA);
+    color: white;
+    font-size: 0.85em;
+    font-weight: bold;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+.user-avatar {
+    border-radius: 50%;
+    border: 3px solid #ff4b4b;
+    box-shadow: 0 4px 15px rgba(255, 75, 75, 0.3);
+}
+</style>
+""", unsafe_allow_html=True)
+
 # Sidebar for Configuration
 st.sidebar.header(t("sidebar_header"))
-username = st.sidebar.text_input(t("username_label"), value=os.getenv("GITHUB_USERNAME", ""))
-token = st.sidebar.text_input(t("token_label"), value=os.getenv("GITHUB_TOKEN", ""), type="password")
+
+# Initialize session state for inputs to prevent resetting
+if "github_username" not in st.session_state:
+    st.session_state["github_username"] = os.getenv("GITHUB_USERNAME", "")
+if "github_token" not in st.session_state:
+    st.session_state["github_token"] = os.getenv("GITHUB_TOKEN", "")
+
+username = st.sidebar.text_input(t("username_label"), value=st.session_state["github_username"], key="user_input")
+token = st.sidebar.text_input(t("token_label"), value=st.session_state["github_token"], type="password", key="token_input")
+
+st.session_state["github_username"] = username
+st.session_state["github_token"] = token
 
 st.sidebar.caption("ℹ️ **Note:** Using a token ensures 100% accurate data and prevents missing repositories due to rate limits.")
 
@@ -100,13 +212,24 @@ if st.sidebar.button(t("fetch_data_button")):
     if not token:
         st.sidebar.warning("⚠️ No token provided. Rate limit is 60 requests/hour. You may encounter errors.")
     
+    lottie_search = load_lottieurl("https://lottie.host/8e2f8c5b-432d-4256-a14a-8d76dbd8b1e4/RAnJ9Yk7k9.json")
+    if not lottie_search:
+        lottie_search = load_lottieurl("https://assets3.lottiefiles.com/packages/lf20_fcfjwiyb.json")
+    
+    status_col1, status_col2 = st.sidebar.columns([1, 3])
+    with status_col1:
+        if lottie_search:
+            st_lottie(lottie_search, height=50, key="fetching_lottie")
+    with status_col2:
+        st.markdown(f"**{t('fetching_spinner')}**")
+        
     progress_bar = st.sidebar.progress(0)
     status_text = st.sidebar.empty()
 
     def update_progress(count, total, current_repo):
         progress = count / total
         progress_bar.progress(progress)
-        status_text.text(f"Fetching {count}/{total}: {current_repo}")
+        status_text.caption(f"🚀 Step {count}/{total}: `{current_repo}`")
 
     with st.spinner(t("fetching_spinner")):
         fetcher = GitHubFetcher(username=username, token=token)
@@ -118,7 +241,9 @@ if st.sidebar.button(t("fetch_data_button")):
 
         if data:
             fetcher.save_data(data)
+            st.toast(t("fetch_success"), icon="✅")
             st.sidebar.success(t("fetch_success"))
+            st.balloons()
         else:
             st.sidebar.error(t("fetch_error") + " (Check terminal for details, likely rate limit)")
 
@@ -147,6 +272,24 @@ try:
         st.stop()
 
     stats = analyzer.get_basic_stats()
+
+    # User Avatar and Header Profile in Sidebar
+    if analyzer.profile_data:
+        avatar_url = analyzer.profile_data.get('avatar_url')
+        if avatar_url:
+            st.sidebar.markdown(f'''
+            <div style="text-align: center; margin-top: -10px;">
+                <img src="{avatar_url}" width="150" class="user-avatar" style="margin-bottom: 10px;">
+                <h3 style="color: #ff4b4b; margin: 0;">{analyzer.profile_data.get('name', username)}</h3>
+                <p style="color: #8b949e; font-size: 0.9em;">{analyzer.profile_data.get('bio', '')}</p>
+            </div>
+            <hr>
+            ''', unsafe_allow_html=True)
+            
+        # Top Dashboard Banner
+        st.subheader(f"👋 Welcome, {analyzer.profile_data.get('name', username)}!")
+    else:
+        st.subheader(f"👋 Welcome, {username}!")
 
     # Overview Section
     st.header(t("overview_header"))
@@ -191,21 +334,40 @@ try:
                  # Grade Color
                  grade_color = "#2ea043" if health['grade'] == 'A' else "#e3b341" if health['grade'] == 'B' else "#da3633"
                  
-                 with st.container():
-                     c1, c2, c3 = st.columns([2, 1, 1])
-                     with c1:
-                         st.markdown(f"**{repo['name']}**")
-                         st.caption(f"{repo.get('description', '')}")
-                     with c2:
-                         st.markdown(f"{t('health_label')}: <span style='color:{grade_color}; font-weight:bold; border:1px solid {grade_color}; padding:2px 6px; border-radius:4px;'>{health['grade']}</span>", unsafe_allow_html=True)
-                         if health['missing']:
-                             st.caption(f"{t('missing_label')}: {', '.join(health['missing'][:2])}")
-                     with c3:
-                         if stack:
-                            st.write(" ".join([f"`{s}`" for s in stack]))
-                         else:
-                            st.caption(t("no_stack_detected"))
-                     st.divider()
+                 # Glass-card layout & Tech Badges with Devicons
+                 badges = []
+                 for s in stack:
+                     icon_url = get_devicon_url(s)
+                     if icon_url:
+                         badges.append(f"<span class='tech-badge'><img src='{icon_url}' height='14' style='vertical-align: text-bottom; margin-right: 4px;' onerror='this.style.display=\"none\"'>{s}</span>")
+                     else:
+                         badges.append(f"<span class='tech-badge'>{s}</span>")
+                         
+                 badges_html = " ".join(badges) if badges else f"<span style='color:gray;font-size:0.8em;'>{t('no_stack_detected')}</span>"
+                 missing_html = f"<br><span style='font-size:0.8em;color:#8b949e;'>{t('missing_label')}: {', '.join(health['missing'][:2])}</span>" if health['missing'] else ""
+                 
+                 card_html = f"""
+<div class="glass-card">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 15px;">
+        <div style="flex: 2; padding-right: 15px; min-width: 250px;">
+            <h3 style="margin-top:0; color:#58a6ff; margin-bottom:5px;">{repo['name']}</h3>
+            <p style="color:#8b949e; margin-bottom:10px; font-size: 0.95em; line-height: 1.5; white-space: normal;">{repo.get('description', '') or 'No description provided.'}</p>
+        </div>
+        <div style="flex: 1; text-align: center; border-left: 1px solid rgba(255,255,255,0.1); border-right: 1px solid rgba(255,255,255,0.1); padding: 0 10px; min-width: 120px;">
+            <div style="font-size: 0.85em; margin-bottom: 8px; color: #8b949e;">{t('health_label')}</div>
+            <span style='color:{grade_color}; font-weight:bold; font-size:1.4em; border:2px solid {grade_color}; padding:6px 16px; border-radius:10px; display:inline-block;'>{health['grade']}</span>
+            {missing_html}
+        </div>
+        <div style="flex: 1; text-align: center; padding-left: 15px; min-width: 150px;">
+            <div style="margin-bottom: 8px; color: #8b949e; font-size: 0.85em;">Tech Stack</div>
+            <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 4px;">
+                {badges_html}
+            </div>
+        </div>
+    </div>
+</div>
+"""
+                 st.markdown(card_html, unsafe_allow_html=True)
         else:
             st.info(t("clustering_info_no_data"))
 
@@ -213,8 +375,11 @@ try:
         st.subheader(t("subheader_language"))
         langs = stats.get("top_languages", {})
         if langs:
-            fig = px.pie(values=list(langs.values()), names=list(langs.keys()), title=t("language_pie_title"))
-            st.plotly_chart(fig)
+            import pandas as pd
+            df_langs = pd.DataFrame(dict(r=list(langs.values()), theta=list(langs.keys())))
+            fig = px.line_polar(df_langs, r='r', theta='theta', line_close=True, title=t("language_pie_title"), template="plotly_dark")
+            fig.update_traces(fill='toself', line_color='#FF0080', fillcolor='rgba(255, 0, 128, 0.4)')
+            st.plotly_chart(fig, use_container_width=True)
             # st.write("Chart disabled for debugging.")
         else:
             st.info(t("language_info_no_data"))
@@ -287,12 +452,45 @@ try:
                 try:
                     forecast = analyzer.forecast_activity()
                     if forecast is not None:
-                        fig = px.line(forecast, x='ds', y='yhat', title=t("forecast_title"))
-                        # Add confidence intervals
-                        fig.add_scatter(x=forecast['ds'], y=forecast['yhat_lower'], mode='lines', line=dict(width=0), showlegend=False)
-                        fig.add_scatter(x=forecast['ds'], y=forecast['yhat_upper'], fill='tonexty', mode='lines', line=dict(width=0), showlegend=False)
-                        st.plotly_chart(fig)
-                        # st.write("Chart disabled for debugging.")
+                        # Ensure 'ds' is datetime
+                        forecast['ds'] = pd.to_datetime(forecast['ds'])
+                        
+                        fig = px.line(
+                            forecast, 
+                            x='ds', 
+                            y='yhat', 
+                            title=t("forecast_title"),
+                            labels={'ds': 'Date', 'yhat': 'Predicted Actions'},
+                            template="plotly_dark"
+                        )
+                        
+                        # Style the main prediction line
+                        fig.update_traces(line=dict(color="#ff4b4b", width=2.5))
+                        
+                        # Add smooth confidence intervals
+                        fig.add_scatter(x=forecast['ds'], y=forecast['yhat_lower'], mode='lines', line=dict(width=0), showlegend=False, hoverinfo='skip')
+                        fig.add_scatter(
+                            x=forecast['ds'], 
+                            y=forecast['yhat_upper'], 
+                            fill='tonexty', 
+                            mode='lines', 
+                            line=dict(width=0), 
+                            fillcolor='rgba(255, 75, 75, 0.2)', 
+                            name='Confidence Interval',
+                            hoverinfo='skip'
+                        )
+                        
+                        # Clean up the layout to make it extremely readable
+                        fig.update_layout(
+                            xaxis_title="", 
+                            yaxis_title="Expected GitHub Activity",
+                            hovermode="x unified",
+                            margin=dict(l=10, r=10, t=50, b=10),
+                            xaxis=dict(showgrid=False),
+                            yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.1)")
+                        )
+                        
+                        st.plotly_chart(fig, use_container_width=True)
                     else:
                         st.warning(t("forecast_warning_not_enough"))
                 except Exception as e:
@@ -528,15 +726,26 @@ try:
                 generate_btn = st.form_submit_button(t("generate_resume_button"))
 
         if generate_btn:
-            with st.spinner(t("analyzing_profile_spinner")):
+            lottie_build = load_lottieurl("https://lottie.host/7e040f7b-993d-4c32-b7a4-3158cabb0ea6/4w582w0eWe.json")
+            if not lottie_build:
+                lottie_build = load_lottieurl("https://assets10.lottiefiles.com/packages/lf20_bhebgw2x.json")
+                
+            res_col1, res_col2 = st.columns([1, 4])
+            with res_col1:
+                if lottie_build:
+                    st_lottie(lottie_build, height=80, key="resume_lottie")
+            with res_col2:
+                st.info(f"**⚡ {t('analyzing_profile_spinner')}**")
+                
+            with st.spinner("AI is carefully assembling your skills and projects..."):
                 # Prepare data for LLM
                 stats = analyzer.get_basic_stats()
                 user_stats = analyzer.get_user_stats()
                 
                 user_summary = f"Name: {res_name}, Bio: {analyzer.profile_data.get('bio', '')}, Repos: {stats.get('total_repos')}, Top Lang: {stats.get('top_languages')}"
                 
-                # Get top 10 repos for context to allow for more project selection
-                top_repos = analyzer.repos_df.sort_values('stars', ascending=False).head(10)
+                # Get top 20 repos for context to allow for more project selection
+                top_repos = analyzer.repos_df.sort_values('stars', ascending=False).head(20)
                 repo_summaries = []
                 for _, row in top_repos.iterrows():
                     repo_summaries.append(f"- {row['name']}: {row['description']} (Lang: {row['language']})")

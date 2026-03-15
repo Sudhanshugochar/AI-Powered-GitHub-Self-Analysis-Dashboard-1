@@ -1,9 +1,19 @@
+
 import os
 import requests
 import json
 import time
 from datetime import datetime
 from dotenv import load_dotenv
+
+# Conditional import for mock data (assuming it's in the same package)
+try:
+    from src.mock_data import get_mock_data
+except ImportError:
+    try:
+        from mock_data import get_mock_data 
+    except ImportError:
+        get_mock_data = None
 
 # Load environment variables
 load_dotenv()
@@ -38,14 +48,14 @@ class GitHubFetcher:
                     reset_time = response.headers.get("X-RateLimit-Reset")
                     if reset_time:
                          wait_time = int(reset_time) - time.time() + 1
-                         if wait_time > 0 and wait_time < 60: # Only wait deeply if short
+                         if wait_time > 0 and wait_time < 60: 
                              print(f"Rate limited. Waiting {wait_time:.0f}s...")
                              time.sleep(wait_time)
                              continue
-                    print(f"Rate limit exceeded or access forbidden: {response.text}")
+                    print(f"Rate limit exceeded: {response.text}")
                     return None
                 elif response.status_code >= 500:
-                    print(f"Server error {response.status_code}. Retrying in {backoff}s...")
+                    print(f"Server error {response.status_code}. Retrying...")
                     time.sleep(backoff)
                     backoff *= 2
                     continue
@@ -69,10 +79,8 @@ class GitHubFetcher:
         while True:
             params = {"per_page": 100, "page": page}
             data = self._get(f"users/{self.username}/repos", params=params)
-            # Check for explicitly empty list (end of pagination) vs None (error)
+            
             if data is None: 
-                # If error on first page, problem. If later page, maybe just partial data? 
-                # Ideally we want to fail if we can't get full list.
                 if page == 1: return None 
                 break 
             if not data:
@@ -82,7 +90,6 @@ class GitHubFetcher:
         return repos
 
     def fetch_repo_files(self, repo_name):
-        # Fetch root contents to detect files like package.json, LICENSE, etc.
         data = self._get(f"repos/{self.username}/{repo_name}/contents")
         files = []
         if isinstance(data, list):
@@ -102,7 +109,7 @@ class GitHubFetcher:
             except Exception as e:
                 print(f"Error decoding README for {repo_name}: {e}")
 
-        commits = self._get(f"repos/{self.username}/{repo_name}/commits", params={"per_page": 5}) # Limit to 5 for speed
+        commits = self._get(f"repos/{self.username}/{repo_name}/commits", params={"per_page": 5}) 
         files = self.fetch_repo_files(repo_name)
         
         return {
@@ -113,15 +120,25 @@ class GitHubFetcher:
         }
 
     def fetch_all_data(self, progress_callback=None):
+        print(f"DEBUG: Using token: {'Yes' if self.token else 'No'}")
+        
+        # Try fetching profile
         profile = self.fetch_user_profile()
+        
+        # FALLBACK REMOVED: User requested real-time data only
         if not profile:
-            print("Failed to fetch user profile.")
+            print("Failed to fetch user profile (likely Rate Limit). Returning None.")
             return None
         
         repos = self.fetch_repositories()
         if repos is None:
              print("Failed to fetch repositories.")
              return None
+
+        # LIMIT REMOVED: Fetching all repositories as requested
+        # if not self.token and len(repos) > 5:
+        #     print("WARNING: No token provided. Limiting to top 5 repositories.")
+        #     repos = repos[:5] 
 
         full_data = {
             "profile": profile,
@@ -133,26 +150,23 @@ class GitHubFetcher:
             count = 0 
             total_repos = len(repos)
             for repo in repos:
-                # Include ALL repositories, even forks
-                # if repo.get("fork", False):
-                #     continue 
-                
                 repo_name = repo["name"]
                 if progress_callback:
                     progress_callback(count, total_repos, repo_name)
-
+                
+                time.sleep(0.5) 
+                
                 details = self.fetch_repo_details(repo_name)
                 
                 repo_data = {
                     "metadata": repo,
-                    "details": details
+                    "details": details or {} 
                 }
                 full_data["repositories"].append(repo_data)
                 count += 1
-                if count % 10 == 0:
-                    print(f"Processed {count}/{len(repos)}...")
-                time.sleep(0.1) # Further reduced sleep to speed up
-
+                if count % 5 == 0:
+                     print(f"Processed {count}/{len(repos)}...")
+                
         return full_data
 
     def save_data(self, data, filename="data/raw_data.json"):
